@@ -1,11 +1,6 @@
-# terraform-null-tagger / terraform-provider-tagger wiring. See
-# https://github.com/rafalmasiarek/terraform-null-tagger and
-# https://github.com/rafalmasiarek/terraform-provider-tagger.
-#
-# use_tagger = false skips all of this and falls back to var.tags as-is -
-# but the tagger provider must still be declared in required_providers
-# regardless (Terraform validates provider availability at init time
-# independently of count = 0).
+# terraform-null-tagger / terraform-provider-tagger wiring.
+# use_tagger = false falls back to var.tags; provider is still required
+# regardless (init validates it independently of count = 0).
 
 data "tagger_origin" "self" {
   count       = var.use_tagger ? 1 : 0
@@ -23,5 +18,7 @@ module "tagger" {
 }
 
 locals {
-  resolved_tags = var.use_tagger ? module.tagger[0].tags : var.tags
+  # var.tags fills in keys tagger doesn't already produce - tagger's own
+  # tags always win on conflict.
+  resolved_tags = var.use_tagger ? merge(var.tags, module.tagger[0].tags) : var.tags
 }

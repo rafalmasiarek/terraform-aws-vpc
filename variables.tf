@@ -31,7 +31,7 @@ variable "tagger_context" {
 }
 
 variable "tags" {
-  description = "Plain tags, used directly when use_tagger = false."
+  description = "When use_tagger = true, fills in keys the tagger module doesn't already produce (tagger wins on conflict). Used as-is when use_tagger = false."
   type        = map(string)
   default     = {}
 }
