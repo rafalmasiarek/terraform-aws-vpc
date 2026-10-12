@@ -1,6 +1,36 @@
-# terraform-null-tagger / terraform-provider-tagger wiring.
-# use_tagger = false falls back to var.tags; provider is still required
-# regardless (init validates it independently of count = 0).
+#
+# Standard wiring for terraform-null-tagger / terraform-provider-tagger.
+# Identical in every module that uses it - copy verbatim, do not edit here.
+#
+# https://github.com/rafalmasiarek/terraform-null-tagger
+# https://github.com/rafalmasiarek/terraform-provider-tagger
+#
+# Requires a local map named `taggable` (map(string): key => name), defined
+# elsewhere in this module - one entry per resource that needs tags.
+#
+# use_tagger = false bypasses all of this and uses var.tags directly. The
+# tagger provider must still be declared in required_providers regardless -
+# Terraform checks provider availability at init time independently of
+# for_each = {}.
+#
+
+variable "use_tagger" {
+  description = "Compute and apply standardized tags via terraform-null-tagger. When false, use var.tags as-is instead."
+  type        = bool
+  default     = true
+}
+
+variable "tagger_context" {
+  description = "module.tagger.context from the root stack's base terraform-null-tagger call."
+  type        = any
+  default     = null
+}
+
+variable "tags" {
+  description = "Custom tags for the resource(s)."
+  type        = map(string)
+  default     = {}
+}
 
 data "tagger_origin" "self" {
   count       = var.use_tagger ? 1 : 0
@@ -8,10 +38,11 @@ data "tagger_origin" "self" {
 }
 
 module "tagger" {
-  count   = var.use_tagger ? 1 : 0
-  source  = "git::https://github.com/rafalmasiarek/terraform-null-tagger.git?ref=v0.1.0"
-  context = var.tagger_context
-  name    = var.name
+  for_each = var.use_tagger ? local.taggable : {}
+  source   = "rafalmasiarek/tagger/null"
+  version  = ">= 0.1.0"
+  context  = var.tagger_context
+  name     = each.value
 
   origin_source  = data.tagger_origin.self[0].source
   origin_version = data.tagger_origin.self[0].version
@@ -20,5 +51,8 @@ module "tagger" {
 locals {
   # var.tags fills in keys tagger doesn't already produce - tagger's own
   # tags always win on conflict.
-  resolved_tags = var.use_tagger ? merge(var.tags, module.tagger[0].tags) : var.tags
+  tagger_tags = {
+    for k in keys(local.taggable) :
+    k => var.use_tagger ? merge(var.tags, module.tagger[k].tags) : var.tags
+  }
 }
