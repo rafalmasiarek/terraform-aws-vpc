@@ -1,13 +1,17 @@
 locals {
-  taggable = { this = { name = var.name } }
+  taggable = merge({ this = { name = var.name } }, var.enable_flow_logs ? {
+    "flow-log"      = { name = local.flow_log_name, service = {}, attributes = [] }
+    "flow-log-role" = { name = "${var.name}-flow-log-role", service = {}, attributes = [] }
+  } : {})
 
-  # AWS rejects assign_generated_ipv6_cidr_block = true alongside an
-  # explicit ipv6_cidr_block or ipv6_ipam_pool_id - only auto-generate
-  # when the caller didn't bring their own.
   assign_generated_ipv6_cidr_block = var.enable_ipv6 && var.ipv6_cidr_block == null && var.ipv6_ipam_pool_id == null
+
+  flow_log_name = "${var.name}-flow-log"
 }
 
 resource "aws_vpc" "this" {
+  count = var.ipv6_only ? 0 : 1
+
   cidr_block           = var.cidr_block
   enable_dns_support   = var.enable_dns_support
   enable_dns_hostnames = var.enable_dns_hostnames
@@ -17,19 +21,54 @@ resource "aws_vpc" "this" {
   ipv6_ipam_pool_id                = var.ipv6_ipam_pool_id
 
   tags = local.tagger_tags["this"]
+
+  lifecycle {
+    precondition {
+      condition     = !var.ipv6_only || (var.cidr_block == null && var.additional_ipv4_cidr_blocks == [])
+      error_message = "ipv6_only = true requires cidr_block = null and no additional_ipv4_cidr_blocks."
+    }
+    precondition {
+      condition     = !(var.ipv6_only && var.enable_ipv6)
+      error_message = "ipv6_only and enable_ipv6 are mutually exclusive - an IPv6-only VPC has no separate IPv6 CIDR association step."
+    }
+    precondition {
+      condition     = var.ipv6_cidr_block == null || var.enable_ipv6
+      error_message = "ipv6_cidr_block is set but enable_ipv6 = false. Enable IPv6 or remove the explicit CIDR."
+    }
+    precondition {
+      condition     = var.ipv6_ipam_pool_id == null || var.enable_ipv6
+      error_message = "ipv6_ipam_pool_id is set but enable_ipv6 = false. Enable IPv6 or remove the IPAM pool reference."
+    }
+  }
+}
+
+# IPv6-only VPC: created without an IPv4 CIDR, with a generated IPv6 block.
+resource "aws_vpc" "ipv6_only" {
+  count = var.ipv6_only ? 1 : 0
+
+  enable_dns_support   = var.enable_dns_support
+  enable_dns_hostnames = var.enable_dns_hostnames
+
+  assign_generated_ipv6_cidr_block = true
+
+  tags = local.tagger_tags["this"]
+}
+
+locals {
+  vpc_id = var.ipv6_only ? aws_vpc.ipv6_only[0].id : aws_vpc.this[0].id
 }
 
 resource "aws_internet_gateway" "this" {
-  vpc_id = aws_vpc.this.id
+  count = var.ipv6_only ? 0 : 1
+
+  vpc_id = local.vpc_id
 
   tags = merge(local.tagger_tags["this"], { Name = "${var.name}-igw" })
 }
 
-# Separate from NAT Gateway on purpose - NAT Gateway does not carry IPv6
-# traffic. This is the only AWS mechanism for private-subnet IPv6 egress.
 resource "aws_egress_only_internet_gateway" "this" {
-  count  = var.enable_ipv6 ? 1 : 0
-  vpc_id = aws_vpc.this.id
+  count  = (var.enable_ipv6 || var.ipv6_only) ? 1 : 0
+  vpc_id = local.vpc_id
 
   tags = merge(local.tagger_tags["this"], { Name = "${var.name}-eigw" })
 }
@@ -37,16 +76,14 @@ resource "aws_egress_only_internet_gateway" "this" {
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
   for_each = toset(var.additional_ipv4_cidr_blocks)
 
-  vpc_id     = aws_vpc.this.id
+  vpc_id     = local.vpc_id
   cidr_block = each.value
 }
 
-# No ingress/egress blocks below = every rule removed from the default
-# security group, per AWS's own hardening recommendation.
 resource "aws_default_security_group" "this" {
   count = var.restrict_default_security_group ? 1 : 0
 
-  vpc_id = aws_vpc.this.id
+  vpc_id = local.vpc_id
 
   tags = merge(local.tagger_tags["this"], { Name = "${var.name}-default-sg-restricted" })
 }
@@ -64,6 +101,108 @@ resource "aws_vpc_dhcp_options" "this" {
 resource "aws_vpc_dhcp_options_association" "this" {
   count = var.enable_dhcp_options ? 1 : 0
 
-  vpc_id          = aws_vpc.this.id
+  vpc_id          = local.vpc_id
   dhcp_options_id = aws_vpc_dhcp_options.this[0].id
+}
+
+# --- Flow Logs ---
+
+resource "aws_cloudwatch_log_group" "flow_log" {
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloudwatch-logs" ? 1 : 0
+
+  name              = "/vpc/${local.flow_log_name}"
+  retention_in_days = var.flow_log_log_group_retention_days
+  kms_key_id        = var.flow_log_log_group_kms_key_id
+
+  tags = merge(local.tagger_tags["flow-log"], var.flow_log_tags)
+}
+
+data "aws_iam_policy_document" "flow_log_assume_role" {
+  count = var.enable_flow_logs ? 1 : 0
+
+  statement {
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["vpc-flow-logs.amazonaws.com"]
+    }
+  }
+}
+
+data "aws_iam_policy_document" "flow_log_cw" {
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloudwatch-logs" ? 1 : 0
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+      "logs:DescribeLogGroups",
+      "logs:DescribeLogStreams",
+    ]
+
+    resources = [aws_cloudwatch_log_group.flow_log[0].arn]
+  }
+}
+
+data "aws_iam_policy_document" "flow_log_s3" {
+  count = var.enable_flow_logs && var.flow_log_destination_type == "s3" ? 1 : 0
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "s3:AbortMultipartUpload",
+      "s3:GetBucketLocation",
+      "s3:ListBucketMultipartUploads",
+      "s3:ListMultipartUploadParts",
+    ]
+
+    resources = [var.flow_log_destination_arn]
+  }
+
+  statement {
+    effect = "Allow"
+
+    actions = [
+      "s3:PutObject",
+    ]
+
+    resources = ["${var.flow_log_destination_arn}/*"]
+  }
+}
+
+resource "aws_iam_role" "flow_log" {
+  count = var.enable_flow_logs ? 1 : 0
+
+  name               = "${var.name}-flow-log-role"
+  assume_role_policy = data.aws_iam_policy_document.flow_log_assume_role[0].json
+
+  tags = local.tagger_tags["flow-log-role"]
+}
+
+resource "aws_iam_role_policy" "flow_log" {
+  count = var.enable_flow_logs ? 1 : 0
+
+  role = aws_iam_role.flow_log[0].id
+  name = "${var.name}-flow-log-policy"
+
+  policy = var.flow_log_destination_type == "cloudwatch-logs" ? data.aws_iam_policy_document.flow_log_cw[0].json : data.aws_iam_policy_document.flow_log_s3[0].json
+}
+
+resource "aws_flow_log" "this" {
+  count = var.enable_flow_logs ? 1 : 0
+
+  vpc_id                   = local.vpc_id
+  log_destination_type     = var.flow_log_destination_type
+  log_destination          = var.flow_log_destination_type == "cloudwatch-logs" ? aws_cloudwatch_log_group.flow_log[0].arn : var.flow_log_destination_arn
+  iam_role_arn             = aws_iam_role.flow_log[0].arn
+  traffic_type             = var.flow_log_traffic_type
+  max_aggregation_interval = 60
+
+  tags = merge(local.tagger_tags["flow-log"], var.flow_log_tags)
 }

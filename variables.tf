@@ -68,3 +68,55 @@ variable "dhcp_options_ntp_servers" {
   type    = list(string)
   default = []
 }
+
+# --- Flow Logs ---
+
+variable "enable_flow_logs" {
+  description = "Create a VPC Flow Log to CloudWatch Logs."
+  type        = bool
+  default     = false
+}
+
+variable "flow_log_destination_type" {
+  description = "\"cloudwatch-logs\" or \"s3\"."
+  type        = string
+  default     = "cloudwatch-logs"
+}
+
+variable "flow_log_destination_arn" {
+  description = "S3 bucket ARN when flow_log_destination_type = \"s3\". Ignored for cloudwatch-logs (log group is created automatically)."
+  type        = string
+  default     = null
+}
+
+variable "flow_log_traffic_type" {
+  description = "\"ALL\" or \"REJECT\"."
+  type        = string
+  default     = "ALL"
+}
+
+variable "flow_log_log_group_retention_days" {
+  description = "CloudWatch Logs retention in days. Only used when destination is cloudwatch-logs."
+  type        = number
+  default     = 90
+}
+
+variable "flow_log_log_group_kms_key_id" {
+  description = "KMS key for the Flow Log log group. Null = service-managed key."
+  type        = string
+  default     = null
+}
+
+variable "flow_log_tags" {
+  description = "Extra tags on the Flow Log resource and its IAM role / log group."
+  type        = map(string)
+  default     = {}
+}
+
+# --- IPv6 validation ---
+
+variable "ipv6_only" {
+  description = "IPv6-only VPC: no IPv4 CIDR block, no IGW, only EIGW. Mutually exclusive with cidr_block usage - set cidr_block to null when true."
+  type        = bool
+  default     = false
+}
