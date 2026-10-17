@@ -1,5 +1,8 @@
 locals {
-  taggable = merge({ this = { name = var.name } }, var.enable_flow_logs ? {
+  taggable = merge({ this = {
+    name    = var.name
+    service = { network = { cidr_block = var.cidr_block } }
+  } }, var.enable_flow_logs ? {
     "flow-log"      = { name = local.flow_log_name, service = {}, attributes = [] }
     "flow-log-role" = { name = "${var.name}-flow-log-role", service = {}, attributes = [] }
   } : {})
