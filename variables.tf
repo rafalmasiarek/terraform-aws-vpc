@@ -4,8 +4,13 @@ variable "name" {
 }
 
 variable "cidr_block" {
-  description = "IPv4 CIDR block for the VPC."
+  description = "IPv4 CIDR block for the VPC. Required unless ipv6_only = true."
   type        = string
+
+  validation {
+    condition     = var.cidr_block == null || can(cidrhost(var.cidr_block, 0))
+    error_message = "cidr_block must be a valid IPv4 CIDR (e.g. 10.0.0.0/16)."
+  }
 }
 
 variable "enable_dns_support" {
@@ -116,7 +121,16 @@ variable "flow_log_tags" {
 # --- IPv6 validation ---
 
 variable "ipv6_only" {
-  description = "IPv6-only VPC: no IPv4 CIDR block, no IGW, only EIGW. Mutually exclusive with cidr_block usage - set cidr_block to null when true."
+  description = "IPv6-only VPC: no IPv4 CIDR block, no IGW, only EIGW. Set cidr_block to null when true."
   type        = bool
   default     = false
+
+  validation {
+    condition     = !var.ipv6_only || var.cidr_block == null
+    error_message = "ipv6_only = true requires cidr_block = null."
+  }
+  validation {
+    condition     = !(var.ipv6_only && var.enable_ipv6)
+    error_message = "ipv6_only and enable_ipv6 are mutually exclusive."
+  }
 }

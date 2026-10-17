@@ -24,14 +24,6 @@ resource "aws_vpc" "this" {
 
   lifecycle {
     precondition {
-      condition     = !var.ipv6_only || (var.cidr_block == null && var.additional_ipv4_cidr_blocks == [])
-      error_message = "ipv6_only = true requires cidr_block = null and no additional_ipv4_cidr_blocks."
-    }
-    precondition {
-      condition     = !(var.ipv6_only && var.enable_ipv6)
-      error_message = "ipv6_only and enable_ipv6 are mutually exclusive - an IPv6-only VPC has no separate IPv6 CIDR association step."
-    }
-    precondition {
       condition     = var.ipv6_cidr_block == null || var.enable_ipv6
       error_message = "ipv6_cidr_block is set but enable_ipv6 = false. Enable IPv6 or remove the explicit CIDR."
     }
@@ -158,6 +150,7 @@ data "aws_iam_policy_document" "flow_log_s3" {
     actions = [
       "s3:AbortMultipartUpload",
       "s3:GetBucketLocation",
+      "s3:ListBucket",
       "s3:ListBucketMultipartUploads",
       "s3:ListMultipartUploadParts",
     ]
