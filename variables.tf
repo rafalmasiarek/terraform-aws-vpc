@@ -33,12 +33,22 @@ variable "ipv6_cidr_block" {
   description = "Bring your own /56 IPv6 CIDR block instead of an Amazon-provided one. Ignored unless enable_ipv6 = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.ipv6_cidr_block == null || var.enable_ipv6 || var.ipv6_only
+    error_message = "ipv6_cidr_block is set but enable_ipv6 = false and ipv6_only = false. Enable IPv6 or remove the explicit CIDR."
+  }
 }
 
 variable "ipv6_ipam_pool_id" {
   description = "IPAM pool to allocate the IPv6 CIDR from, instead of an Amazon-provided one. Ignored unless enable_ipv6 = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.ipv6_ipam_pool_id == null || var.enable_ipv6 || var.ipv6_only
+    error_message = "ipv6_ipam_pool_id is set but enable_ipv6 = false and ipv6_only = false. Enable IPv6 or remove the IPAM pool reference."
+  }
 }
 
 variable "additional_ipv4_cidr_blocks" {
@@ -83,15 +93,25 @@ variable "enable_flow_logs" {
 }
 
 variable "flow_log_destination_type" {
-  description = "\"cloudwatch-logs\" or \"s3\"."
+  description = "\"cloud-watch-logs\" or \"s3\"."
   type        = string
-  default     = "cloudwatch-logs"
+  default     = "cloud-watch-logs"
+
+  validation {
+    condition     = contains(["cloud-watch-logs", "s3"], var.flow_log_destination_type)
+    error_message = "flow_log_destination_type must be \"cloud-watch-logs\" or \"s3\"."
+  }
 }
 
 variable "flow_log_destination_arn" {
-  description = "S3 bucket ARN when flow_log_destination_type = \"s3\". Ignored for cloudwatch-logs (log group is created automatically)."
+  description = "S3 bucket ARN when flow_log_destination_type = \"s3\". Ignored for cloud-watch-logs (log group is created automatically). The caller must add a bucket policy granting delivery.logs.amazonaws.com."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.flow_log_destination_type != "s3" || var.flow_log_destination_arn != null
+    error_message = "flow_log_destination_arn is required when flow_log_destination_type = \"s3\"."
+  }
 }
 
 variable "flow_log_traffic_type" {
@@ -101,7 +121,7 @@ variable "flow_log_traffic_type" {
 }
 
 variable "flow_log_log_group_retention_days" {
-  description = "CloudWatch Logs retention in days. Only used when destination is cloudwatch-logs."
+  description = "CloudWatch Logs retention in days. Only used when destination is cloud-watch-logs."
   type        = number
   default     = 90
 }

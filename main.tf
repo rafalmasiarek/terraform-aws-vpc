@@ -1,22 +1,52 @@
 locals {
+  _has_igw  = !var.ipv6_only
+  _has_eigw = var.enable_ipv6 || var.ipv6_only
+
   taggable = merge(
     {
       this = {
-        name    = var.name
-        service = { network = { cidr_block = var.cidr_block } }
-      }
-      igw = {
-        name    = "${var.name}-igw"
-        service = { network = { type = "internet-gateway" } }
-      }
-      eigw = {
-        name    = "${var.name}-eigw"
-        service = { network = { type = "egress-only-internet-gateway" } }
+        name       = var.name
+        service    = { network = { cidr_block = var.cidr_block } }
+        attributes = []
+        created_at = null
+        extra_tags = {}
       }
     },
+    local._has_igw ? {
+      igw = {
+        name       = "${var.name}-igw"
+        service    = { network = { type = "internet-gateway" } }
+        attributes = []
+        created_at = null
+        extra_tags = {}
+      }
+    } : {},
+    local._has_eigw ? {
+      eigw = {
+        name       = "${var.name}-eigw"
+        service    = { network = { type = "egress-only-internet-gateway" } }
+        attributes = []
+        created_at = null
+        extra_tags = {}
+      }
+    } : {},
     var.enable_flow_logs ? {
-      "flow-log"      = { name = local.flow_log_name, service = {}, attributes = [] }
-      "flow-log-role" = { name = "${var.name}-flow-log-role", service = {}, attributes = [] }
+      "flow-log" = {
+        name       = local.flow_log_name
+        service    = {}
+        attributes = []
+        created_at = null
+        extra_tags = {}
+      }
+    } : {},
+    var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? {
+      "flow-log-role" = {
+        name       = "${var.name}-flow-log-role"
+        service    = {}
+        attributes = []
+        created_at = null
+        extra_tags = {}
+      }
     } : {}
   )
 
@@ -38,16 +68,6 @@ resource "aws_vpc" "this" {
 
   tags = local.tagger_tags["this"]
 
-  lifecycle {
-    precondition {
-      condition     = var.ipv6_cidr_block == null || var.enable_ipv6
-      error_message = "ipv6_cidr_block is set but enable_ipv6 = false. Enable IPv6 or remove the explicit CIDR."
-    }
-    precondition {
-      condition     = var.ipv6_ipam_pool_id == null || var.enable_ipv6
-      error_message = "ipv6_ipam_pool_id is set but enable_ipv6 = false. Enable IPv6 or remove the IPAM pool reference."
-    }
-  }
 }
 
 # IPv6-only VPC: created without an IPv4 CIDR, with a generated IPv6 block.
@@ -116,7 +136,7 @@ resource "aws_vpc_dhcp_options_association" "this" {
 # --- Flow Logs ---
 
 resource "aws_cloudwatch_log_group" "flow_log" {
-  count = var.enable_flow_logs && var.flow_log_destination_type == "cloudwatch-logs" ? 1 : 0
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? 1 : 0
 
   name              = "/vpc/${local.flow_log_name}"
   retention_in_days = var.flow_log_log_group_retention_days
@@ -140,7 +160,7 @@ data "aws_iam_policy_document" "flow_log_assume_role" {
 }
 
 data "aws_iam_policy_document" "flow_log_cw" {
-  count = var.enable_flow_logs && var.flow_log_destination_type == "cloudwatch-logs" ? 1 : 0
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? 1 : 0
 
   statement {
     effect = "Allow"
@@ -186,7 +206,7 @@ data "aws_iam_policy_document" "flow_log_s3" {
 }
 
 resource "aws_iam_role" "flow_log" {
-  count = var.enable_flow_logs ? 1 : 0
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? 1 : 0
 
   name               = "${var.name}-flow-log-role"
   assume_role_policy = data.aws_iam_policy_document.flow_log_assume_role[0].json
@@ -195,12 +215,11 @@ resource "aws_iam_role" "flow_log" {
 }
 
 resource "aws_iam_role_policy" "flow_log" {
-  count = var.enable_flow_logs ? 1 : 0
+  count = var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? 1 : 0
 
-  role = aws_iam_role.flow_log[0].id
-  name = "${var.name}-flow-log-policy"
-
-  policy = var.flow_log_destination_type == "cloudwatch-logs" ? data.aws_iam_policy_document.flow_log_cw[0].json : data.aws_iam_policy_document.flow_log_s3[0].json
+  role   = aws_iam_role.flow_log[0].id
+  name   = "${var.name}-flow-log-policy"
+  policy = data.aws_iam_policy_document.flow_log_cw[0].json
 }
 
 resource "aws_flow_log" "this" {
@@ -208,8 +227,8 @@ resource "aws_flow_log" "this" {
 
   vpc_id                   = local.vpc_id
   log_destination_type     = var.flow_log_destination_type
-  log_destination          = var.flow_log_destination_type == "cloudwatch-logs" ? aws_cloudwatch_log_group.flow_log[0].arn : var.flow_log_destination_arn
-  iam_role_arn             = aws_iam_role.flow_log[0].arn
+  log_destination          = var.flow_log_destination_type == "cloud-watch-logs" ? aws_cloudwatch_log_group.flow_log[0].arn : var.flow_log_destination_arn
+  iam_role_arn             = var.flow_log_destination_type == "cloud-watch-logs" ? aws_iam_role.flow_log[0].arn : null
   traffic_type             = var.flow_log_traffic_type
   max_aggregation_interval = 60
 

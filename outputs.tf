@@ -11,7 +11,7 @@ output "internet_gateway_id" {
 }
 
 output "ipv6_cidr_block" {
-  value = (var.enable_ipv6 || var.ipv6_only) ? local.vpc_id != null ? (var.ipv6_only ? aws_vpc.ipv6_only[0].ipv6_cidr_block : aws_vpc.this[0].ipv6_cidr_block) : null : null
+  value = (var.enable_ipv6 || var.ipv6_only) ? (var.ipv6_only ? aws_vpc.ipv6_only[0].ipv6_cidr_block : aws_vpc.this[0].ipv6_cidr_block) : null
 }
 
 output "egress_only_internet_gateway_id" {
