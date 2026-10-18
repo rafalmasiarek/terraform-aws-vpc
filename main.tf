@@ -177,34 +177,6 @@ data "aws_iam_policy_document" "flow_log_cw" {
   }
 }
 
-data "aws_iam_policy_document" "flow_log_s3" {
-  count = var.enable_flow_logs && var.flow_log_destination_type == "s3" ? 1 : 0
-
-  statement {
-    effect = "Allow"
-
-    actions = [
-      "s3:AbortMultipartUpload",
-      "s3:GetBucketLocation",
-      "s3:ListBucket",
-      "s3:ListBucketMultipartUploads",
-      "s3:ListMultipartUploadParts",
-    ]
-
-    resources = [var.flow_log_destination_arn]
-  }
-
-  statement {
-    effect = "Allow"
-
-    actions = [
-      "s3:PutObject",
-    ]
-
-    resources = ["${var.flow_log_destination_arn}/*"]
-  }
-}
-
 resource "aws_iam_role" "flow_log" {
   count = var.enable_flow_logs && var.flow_log_destination_type == "cloud-watch-logs" ? 1 : 0
 
