@@ -1,11 +1,24 @@
 locals {
-  taggable = merge({ this = {
-    name    = var.name
-    service = { network = { cidr_block = var.cidr_block } }
-  } }, var.enable_flow_logs ? {
-    "flow-log"      = { name = local.flow_log_name, service = {}, attributes = [] }
-    "flow-log-role" = { name = "${var.name}-flow-log-role", service = {}, attributes = [] }
-  } : {})
+  taggable = merge(
+    {
+      this = {
+        name    = var.name
+        service = { network = { cidr_block = var.cidr_block } }
+      }
+      igw = {
+        name    = "${var.name}-igw"
+        service = { network = { type = "internet-gateway" } }
+      }
+      eigw = {
+        name    = "${var.name}-eigw"
+        service = { network = { type = "egress-only-internet-gateway" } }
+      }
+    },
+    var.enable_flow_logs ? {
+      "flow-log"      = { name = local.flow_log_name, service = {}, attributes = [] }
+      "flow-log-role" = { name = "${var.name}-flow-log-role", service = {}, attributes = [] }
+    } : {}
+  )
 
   assign_generated_ipv6_cidr_block = var.enable_ipv6 && var.ipv6_cidr_block == null && var.ipv6_ipam_pool_id == null
 
@@ -58,14 +71,14 @@ resource "aws_internet_gateway" "this" {
 
   vpc_id = local.vpc_id
 
-  tags = merge(local.tagger_tags["this"], { Name = "${var.name}-igw" })
+  tags = local.tagger_tags["igw"]
 }
 
 resource "aws_egress_only_internet_gateway" "this" {
   count  = (var.enable_ipv6 || var.ipv6_only) ? 1 : 0
   vpc_id = local.vpc_id
 
-  tags = merge(local.tagger_tags["this"], { Name = "${var.name}-eigw" })
+  tags = local.tagger_tags["eigw"]
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
