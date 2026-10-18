@@ -4,8 +4,13 @@ variable "name" {
 }
 
 variable "cidr_block" {
-  description = "IPv4 CIDR block for the VPC."
+  description = "IPv4 CIDR block for the VPC. Required unless ipv6_only = true."
   type        = string
+
+  validation {
+    condition     = var.cidr_block == null || can(cidrhost(var.cidr_block, 0))
+    error_message = "cidr_block must be a valid IPv4 CIDR (e.g. 10.0.0.0/16)."
+  }
 }
 
 variable "enable_dns_support" {
@@ -28,12 +33,22 @@ variable "ipv6_cidr_block" {
   description = "Bring your own /56 IPv6 CIDR block instead of an Amazon-provided one. Ignored unless enable_ipv6 = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.ipv6_cidr_block == null || var.enable_ipv6 || var.ipv6_only
+    error_message = "ipv6_cidr_block is set but enable_ipv6 = false and ipv6_only = false. Enable IPv6 or remove the explicit CIDR."
+  }
 }
 
 variable "ipv6_ipam_pool_id" {
   description = "IPAM pool to allocate the IPv6 CIDR from, instead of an Amazon-provided one. Ignored unless enable_ipv6 = true."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.ipv6_ipam_pool_id == null || var.enable_ipv6 || var.ipv6_only
+    error_message = "ipv6_ipam_pool_id is set but enable_ipv6 = false and ipv6_only = false. Enable IPv6 or remove the IPAM pool reference."
+  }
 }
 
 variable "additional_ipv4_cidr_blocks" {
@@ -67,4 +82,75 @@ variable "dhcp_options_domain_name_servers" {
 variable "dhcp_options_ntp_servers" {
   type    = list(string)
   default = []
+}
+
+# --- Flow Logs ---
+
+variable "enable_flow_logs" {
+  description = "Create a VPC Flow Log to CloudWatch Logs."
+  type        = bool
+  default     = false
+}
+
+variable "flow_log_destination_type" {
+  description = "\"cloud-watch-logs\" or \"s3\"."
+  type        = string
+  default     = "cloud-watch-logs"
+
+  validation {
+    condition     = contains(["cloud-watch-logs", "s3"], var.flow_log_destination_type)
+    error_message = "flow_log_destination_type must be \"cloud-watch-logs\" or \"s3\"."
+  }
+}
+
+variable "flow_log_destination_arn" {
+  description = "S3 bucket ARN when flow_log_destination_type = \"s3\". Ignored for cloud-watch-logs (log group is created automatically). The caller must add a bucket policy granting delivery.logs.amazonaws.com."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.flow_log_destination_type != "s3" || var.flow_log_destination_arn != null
+    error_message = "flow_log_destination_arn is required when flow_log_destination_type = \"s3\"."
+  }
+}
+
+variable "flow_log_traffic_type" {
+  description = "\"ALL\" or \"REJECT\"."
+  type        = string
+  default     = "ALL"
+}
+
+variable "flow_log_log_group_retention_days" {
+  description = "CloudWatch Logs retention in days. Only used when destination is cloud-watch-logs."
+  type        = number
+  default     = 90
+}
+
+variable "flow_log_log_group_kms_key_id" {
+  description = "KMS key for the Flow Log log group. Null = service-managed key."
+  type        = string
+  default     = null
+}
+
+variable "flow_log_tags" {
+  description = "Extra tags on the Flow Log resource and its IAM role / log group."
+  type        = map(string)
+  default     = {}
+}
+
+# --- IPv6 validation ---
+
+variable "ipv6_only" {
+  description = "IPv6-only VPC: no IPv4 CIDR block, no IGW, only EIGW. Set cidr_block to null when true."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = !var.ipv6_only || var.cidr_block == null
+    error_message = "ipv6_only = true requires cidr_block = null."
+  }
+  validation {
+    condition     = !(var.ipv6_only && var.enable_ipv6)
+    error_message = "ipv6_only and enable_ipv6 are mutually exclusive."
+  }
 }
