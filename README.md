@@ -50,6 +50,27 @@ module "vpc" {
 | `ipv6_cidr_block` | `null` unless `enable_ipv6 = true`. |
 | `egress_only_internet_gateway_id` | `null` unless `enable_ipv6 = true`. |
 | `default_security_group_id` | Always set, regardless of `restrict_default_security_group`. |
+| `additional_ipv4_cidr_block_associations` | Map of CIDR (from `additional_ipv4_cidr_blocks`) to its association ID. |
+
+## External CIDR sources
+
+Every CIDR-shaped input (`cidr_block`, `ipv6_cidr_block`,
+`additional_ipv4_cidr_blocks`) is passed straight through to the
+underlying AWS resources - this module never recalculates or slices
+them itself. Any externally computed value works the same way a
+literal string does:
+
+```hcl
+module "vpc" {
+  source = "..."
+
+  name       = "production"
+  cidr_block = data.netutils_subnet_plan.main.base_cidr # or any other source
+}
+```
+
+This module has no dependency on `netutils` or any other provider for
+this - it's just an ordinary Terraform input.
 
 ## IPv6
 
