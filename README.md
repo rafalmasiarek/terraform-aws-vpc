@@ -1,9 +1,19 @@
 # terraform-aws-vpc
+
+
+
+
+
+
+
+
 ## About
 
 Terraform module provisioning a VPC and Internet Gateway. Subnets, route
 tables and NAT are separate concerns - see
 [terraform-aws-subnets](https://github.com/rafalmasiarek/terraform-aws-subnets).
+
+
 
 
 
@@ -142,8 +152,11 @@ merged with `var.tagger_context`.
 | <a name="output_flow_log_id"></a> [flow\_log\_id](#output\_flow\_log\_id) | n/a |
 | <a name="output_internet_gateway_id"></a> [internet\_gateway\_id](#output\_internet\_gateway\_id) | n/a |
 | <a name="output_ipv6_cidr_block"></a> [ipv6\_cidr\_block](#output\_ipv6\_cidr\_block) | n/a |
+| <a name="output_topology_fragment"></a> [topology\_fragment](#output\_topology\_fragment) | Network topology fragment for composition with sibling modules via provider::netutils::mermaid\_merge(). See terraform-provider-netutils's docs/topology-fragment-spec.md. |
 | <a name="output_vpc_cidr_block"></a> [vpc\_cidr\_block](#output\_vpc\_cidr\_block) | n/a |
 | <a name="output_vpc_id"></a> [vpc\_id](#output\_vpc\_id) | n/a |
+
+
 
 ## License
 
@@ -166,9 +179,13 @@ Source: https://opensource.org/licenses/MIT
 
 
 See [LICENSE](LICENSE) for full details.
+
+
 ## Authors
 
 - Rafał Masiarek | [website](https://masiarek.pl) | [email](mailto:rafal@masiarek.pl) | [github](https://github.com/rafalmasiarek)
+
+
 
 
 <!-- references -->
