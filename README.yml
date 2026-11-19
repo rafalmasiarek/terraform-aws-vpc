@@ -1,0 +1,20 @@
+name: terraform-aws-vpc
+repo_url: https://github.com/rafalmasiarek/terraform-aws-vpc
+license: MIT
+
+context:
+  - "## About"
+  - |
+    Terraform module provisioning a VPC and Internet Gateway. Subnets, route
+    tables and NAT are separate concerns - see
+    [terraform-aws-subnets](https://github.com/rafalmasiarek/terraform-aws-subnets).
+
+includes:
+  - docs/usage.md
+  - docs/terraform.md
+
+authors:
+  - name: Rafał Masiarek
+    email: rafal@masiarek.pl
+    github: rafalmasiarek
+    website: https://masiarek.pl
