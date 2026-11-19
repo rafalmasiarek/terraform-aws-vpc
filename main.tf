@@ -101,6 +101,37 @@ resource "aws_egress_only_internet_gateway" "this" {
   tags = local.tagger_tags["eigw"]
 }
 
+locals {
+  # Network topology fragment for composition with sibling modules via
+  # provider::netutils::mermaid_merge() - see
+  # https://github.com/rafalmasiarek/terraform-provider-netutils/blob/main/docs/topology-fragment-spec.md
+  #
+  # Edge direction follows that spec's egress convention: a gateway
+  # points toward "internet" (the sink), never the reverse.
+  topology_fragment = {
+    entities = concat(
+      [{ id = "internet", label = "Internet", kind = "internet", parent = null }],
+      [{ id = local.vpc_id, label = var.name, kind = "vpc", parent = null }],
+      local._has_igw ? [{
+        id     = aws_internet_gateway.this[0].id
+        label  = "${var.name}-igw"
+        kind   = "internet-gateway"
+        parent = local.vpc_id
+      }] : [],
+      local._has_eigw ? [{
+        id     = aws_egress_only_internet_gateway.this[0].id
+        label  = "${var.name}-eigw"
+        kind   = "egress-only-internet-gateway"
+        parent = local.vpc_id
+      }] : []
+    )
+    edges = concat(
+      local._has_igw ? [{ from = aws_internet_gateway.this[0].id, to = "internet", kind = null, label = null }] : [],
+      local._has_eigw ? [{ from = aws_egress_only_internet_gateway.this[0].id, to = "internet", kind = null, label = null }] : []
+    )
+  }
+}
+
 resource "aws_vpc_ipv4_cidr_block_association" "this" {
   for_each = toset(var.additional_ipv4_cidr_blocks)
 

@@ -33,3 +33,8 @@ output "flow_log_iam_role_arn" {
 output "dhcp_options_id" {
   value = var.enable_dhcp_options ? aws_vpc_dhcp_options.this[0].id : null
 }
+
+output "topology_fragment" {
+  description = "Network topology fragment for composition with sibling modules via provider::netutils::mermaid_merge(). See terraform-provider-netutils's docs/topology-fragment-spec.md."
+  value       = local.topology_fragment
+}
