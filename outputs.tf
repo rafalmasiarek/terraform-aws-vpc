@@ -34,6 +34,11 @@ output "dhcp_options_id" {
   value = var.enable_dhcp_options ? aws_vpc_dhcp_options.this[0].id : null
 }
 
+output "topology_fragment" {
+  description = "Network topology fragment for composition with sibling modules via provider::netutils::mermaid_merge(). See terraform-provider-netutils's docs/topology-fragment-spec.md."
+  value       = local.topology_fragment
+}
+
 output "additional_ipv4_cidr_block_associations" {
   description = "Association ID per CIDR in additional_ipv4_cidr_blocks, keyed by the CIDR itself."
   value       = { for cidr, assoc in aws_vpc_ipv4_cidr_block_association.this : cidr => assoc.id }
